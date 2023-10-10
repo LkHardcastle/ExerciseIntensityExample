@@ -1,0 +1,132 @@
+---
+title: "Example code"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=TRUE, eval = F}
+knitr::opts_chunk$set(echo = TRUE)
+library(INLA)
+library(lme4)
+```
+
+This document contains example code used to conduct the analysis in "A Bayesian hierarchical model for predicting rates of oxygen consumption in mechanically ventilated intensive care patients".
+
+# Data
+
+The data contains breath-by-breath measurements from 35 patients (pid) across over 100 rehabilitation sessions (vid). We are primarily interested in predicting $\dot VO_2$ (`VO2_kg`).
+
+# Bayesian hierarchical models
+
+The fully specified Bayesian hierarchical model defined in the paper can be run as follows
+
+```{r, eval = F}
+######## Fully specified model
+# Prior for the O-U process
+a1 <- 4e+6
+b1 <- 1e+3
+prec.prior.ou <- list(prec = list(prior = "loggamma", 
+                               param = c(a1, b1)
+                               )
+                   )
+# Priors for fixed effects
+prior.fixed <- list(prec = 0.1, prec.intercept = 0.1)
+# Covariates placed on log scale and centered beforehand
+formula <- log(VO2_kg) ~ clogVt + clogPETCO2 + clogRR +
+  calc_sofa + sex + clogage + GPPAQ + clogBMI + clogage*clogBMI +
+  clogVt*clogRR + clogVt*clogPETCO2 +
+  f(numvid, model = "iid") + # Random intercept
+  f(numpid, clogVt, model = "iid") + # Random slope
+  f(Time.1, # Temporal effect
+    model = "ou", # OU process smoothing term
+    group = numvid, # Group by session 
+    control.group = list(model = "iid"),
+    hyper = list(prec = prec.prior.ou)
+    )  # Dependence between tests
+
+mod_full  <-  inla(formula,
+               data = dat,
+               control.fixed = prior.fixed,
+               control.predictor = list(compute = TRUE),
+               control.compute = list(config = TRUE,
+                                      dic = T)
+             )
+### Get model output
+summary(mod1)
+print(mod1$summary.hyperpar)
+
+### For the O-U only model 
+prec.prior1 <- list(prec = list(initial = 15,
+                                fixed = TRUE
+                               )
+                   )
+
+mod_OU  <-  inla(formula,
+               data = dat,
+               control.family = list(hyper = prec.prior1),
+               control.fixed = prior.fixed,
+               control.predictor = list(compute = TRUE),
+               control.compute = list(config = TRUE,
+                                      dic = T)
+               )
+               
+#### For the iid error model
+formula <- log(VO2_kg) ~ clogVt + clogPETCO2 + clogRR +
+  calc_sofa + sex + clogage + GPPAQ + clogBMI + clogage*clogBMI +
+  clogVt*clogRR + clogVt*clogPETCO2 +
+  f(numvid, model = "iid") + # Random intercept
+  f(numpid, clogVt, model = "iid")
+
+mod_full  <-  inla(formula,
+               data = dat,
+               control.fixed = prior.fixed,
+               control.predictor = list(compute = TRUE),
+               control.compute = list(config = TRUE,
+                                      dic = T)
+             )
+```
+
+
+
+# Posterior samples distribution
+
+The following code can be used to generate samples from the posterior distribution.
+
+```{r, eval = F}
+n <- # Number of samples
+mod <- # INLA model output as previously specified
+Sample <- inla.posterior.sample(n, mod,
+                               selection = list(`(Intercept)` = 1,
+                                                `clogVt` = 1,
+                                                `clogPETCO2` = 1,
+                                                `clogRR` = 1,
+                                                `calc_sofa` = 1,
+                                                `sex1` = 1,
+                                                `clogage` = 1,
+                                                `GPPAQ2` = 1,
+                                                `GPPAQ3` = 1,
+                                                `GPPAQ4` = 1,
+                                                `clogBMI` = 1,
+                                                `clogVt:clogRR` = 1,
+                                                `clogVt:clogPETCO2` = 1,
+                                                `clogage:clogBMI` = 1
+                               ))
+# Generate a predictive distribution sample
+cov <- # vector of covariate values
+coef <- Samples[[1]]$latent # Fixed effect samples
+var_ <- Samples[[1]]$hyperpar[[1]]^(-1) + Samples[[1]]$hyperpar[[2]]^(-1) + 
+  # Sample specifically for random slope value
+  clogVt*Samples[[3]]$hyperpar[[1]]^(-1) + 
+  Samples[[4]]$hyperpar[[1]]^(-1)
+# Generate sample
+pred_sample <- coef*cov + rnorm(1, mean = 0, sd = sqrt(var_))
+```
+
+# OUES model
+
+The OUES model is fit using the \texttt{lme4} R package.
+
+```{r, eval = FALSE}
+m_OUES <- lmer(VO2_kg ~ (1|pid) + log10(VE) + (0+log10(VE)|pid), data = dat)
+```
