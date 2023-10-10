@@ -17,6 +17,50 @@ This document contains example code used to conduct the analysis in "A Bayesian 
 
 The data contains breath-by-breath measurements from 35 patients (pid) across over 100 rehabilitation sessions (vid). We are primarily interested in predicting $\dot VO_2$ (`VO2_kg`).
 
+A simulated dataset code be generate using the following code:
+
+```{r, eval = F}
+n <- 100
+s <- rep(NA,n)
+clogVT <- rep(NA,n)
+clogPET <- rep(NA,n)
+clogRR <- rep(NA,n)
+logVO2_kg <- rep(NA,n)
+t <- rep(NA,n)
+s <- rep(NA,n)
+pid <- rnorm(1, mean = 0, sd = sqrt(1/48.39))
+vid <- rnorm(1, mean = 0, sd = sqrt(1/31.07))
+# User input values
+sex <- 0 
+clogage <- 0
+clogBMI <- 0
+sofa <- 10 # Sepsis organ failure assessment score
+GPPAQ <- 1 # 1-4
+
+for(i in 1:n){
+  if(i == 1){
+    t[i] <- 0
+    # OU process
+    s[i] <- rnorm(1, 0 , sd = sqrt(1/41))
+  }else{
+    # Time between breathes
+    t[i] <- t[i-1] + rexp(1) 
+    s[i] <- rnorm(1, mean = s[i-1]*exp(-(t[i] - t[i-1])*0.04), sd = sqrt(1/(41*(1-exp(-2*(t[i] - t[i-1])*0.04))^(-1))))
+  }
+  # Physiological values (centered and on log scale) - doesn't reflect correlation structure we see in the data but can be used to reproduce results
+  clogVT[i] <- rnorm(1, mean = 0, sd = 2)
+  clogPET[i] <- rnorm(1, mean = 0, sd = 0.5)
+  clogRR[i] <- rnorm(1, mean =, sd = 0.2)
+  logVO2_kg[i] <- 1.33 + pid + (1.52 + vid)*clogVT[i] + 1.91*clogPET[i] + 1.09*clogRR[i] -0.11*(clogVT[i]*clogPET[i]) + 0.3*(clogVT[i]*clogRR[i]) -
+    0.01*sofa - 0.01*(GPPAQ == 2) + 0.01*(GPPAQ == 3) + 0.29*(GPPAQ == 4) -0.07*sex + 0.34*clogage - 1.12*clogBMI -2.06*clogage*clogBMI + s[i] +rnorm(1,0,sd = sqrt(1/256.72))
+}
+
+dat <- data.frame(t, logVO2_kg, clogVT, clogPET,clogRR, sex, clogage, clogBMI, sofa, GPPAQ)
+
+
+```
+
+
 # Bayesian hierarchical models
 
 The fully specified Bayesian hierarchical model defined in the paper can be run as follows
