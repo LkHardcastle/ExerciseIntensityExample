@@ -89,7 +89,7 @@ mod_full  <-  inla(formula,
 
 
 
-# Posterior samples distribution
+# Posterior distribution samples
 
 The following code can be used to generate samples from the posterior distribution.
 
